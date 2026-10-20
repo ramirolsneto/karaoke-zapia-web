@@ -79,6 +79,7 @@ def _env_for_kaggle() -> dict[str, str]:
     username = os.environ.get("KAGGLE_USERNAME", "")
     if not token or not username:
         raise RuntimeError("A integração com o Kaggle ainda não está configurada no servidor.")
+    os.environ["KAGGLE_CONFIG_DIR"] = os.path.join(tempfile.gettempdir(), "zapia-kaggle-config")
     env = os.environ.copy()
     env["KAGGLE_API_TOKEN"] = token
     env["KAGGLE_USERNAME"] = username
