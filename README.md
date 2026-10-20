@@ -12,6 +12,9 @@ Site estático para associar uma música a um link do YouTube, reproduzir no pla
 
 - Cole um link do YouTube para abrir o player oficial.
 - Digite o título e, se quiser, artista para buscar letras no LRCLIB.
-- Baixe `KaraokeZapia_GPU_Kaggle.ipynb`, adicione um áudio autorizado como dataset privado no Kaggle e execute o notebook com GPU/Internet ativados.
+- Escolha o tom entre -6 e +6 semitons e baixe `karaoke_settings.json`; adicione esse arquivo junto ao áudio autorizado num dataset privado do Kaggle.
+- Baixe `KaraokeZapia_GPU_Kaggle.ipynb` e execute o notebook com GPU/Internet ativados. Ele aplica o tom ao instrumental e ao MP4, mantendo a duração aproximadamente.
+
+O tom selecionado não altera o som do player original do YouTube; ele é aplicado ao resultado gerado no Kaggle.
 
 O site não precisa de backend nem de chave de API. Ele não baixa áudio do YouTube. A cota de GPU do Kaggle é semanal e pode variar; [consulte a documentação](https://www.kaggle.com/docs/efficient-gpu-usage).
