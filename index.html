@@ -23,7 +23,7 @@
 <script src="https://www.youtube.com/iframe_api"></script>
 <script>
 const $=id=>document.getElementById(id);let selectedId=null,player=null,lyricsLines=[],activeLine=-1;
-for(let n=-6;n<=6;n++){const o=document.createElement('option');o.value=String(n);o.textContent=n===0?'0 semitons (original)':`${n>0?'+':''}${n} semitons (${n<0?'mais grave':'mais agudo'})`;$('semitones').appendChild(o)}
+for(let n=-6;n<=6;n++){const o=document.createElement('option');o.value=String(n);o.textContent=n===0?'0 semitons (original)':`${n>0?'+':''}${n} semitons (${n<0?'mais grave':'mais agudo'})`;$('semitones').appendChild(o)}$('semitones').value='0';
 $('downloadSettings').addEventListener('click',downloadSettings);
 function downloadSettings(){if(!selectedId){$('settingsStatus').textContent='Abra um vídeo do YouTube antes de salvar a configuração.';return}const settings={youtube_url:`https://www.youtube.com/watch?v=${selectedId}`,video_id:selectedId,track_name:$('trackName').value.trim(),artist_name:$('artistName').value.trim(),semitones:Number($('semitones').value)};const blob=new Blob([JSON.stringify(settings,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='karaoke_settings.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);$('settingsStatus').textContent=`Configuração baixada: ${settings.semitones>0?'+':''}${settings.semitones} semitons. Adicione karaoke_settings.json ao dataset privado do Kaggle.`}
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
