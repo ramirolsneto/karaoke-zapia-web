@@ -18,6 +18,17 @@ JOB_RE = re.compile(r"^[a-f0-9]{32}$")
 MUKA_PATH_RE = re.compile(r"^/dynps/share/[A-Za-z0-9_%=-]+/?$")
 
 
+def _safe_diagnostic(value: object) -> str:
+    """Keep useful server diagnostics without exposing credentials or media links."""
+    message = str(value)
+    for key in ("SITE_ACCESS_PIN", "KAGGLE_API_TOKEN"):
+        secret = os.environ.get(key, "")
+        if secret:
+            message = message.replace(secret, "[REDACTED]")
+    message = re.sub(r"https?://[^\s\"'<>]+", "[URL REDACTED]", message, flags=re.IGNORECASE)
+    return message[:500]
+
+
 def _json_bytes(value: object) -> bytes:
     return json.dumps(value, ensure_ascii=False).encode("utf-8")
 
@@ -137,10 +148,11 @@ def _start_job(url: str, semitones: int, job_id: str) -> str:
         (stage / "kernel-metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
         result = _run_kaggle(["kernels", "push", "-p", str(stage)], timeout=240)
         if result.returncode != 0:
-            detail = (result.stderr or result.stdout or "").strip().lower()
-            if "auth" in detail or "token" in detail or "credential" in detail:
-                raise RuntimeError("O Kaggle não aceitou a autenticação configurada no servidor.")
-            raise RuntimeError("O Kaggle não aceitou o envio do processamento.")
+            raw_detail = (result.stderr or result.stdout or "").strip()
+            detail = _safe_diagnostic(raw_detail)
+            if any(word in raw_detail.lower() for word in ("auth", "token", "credential")):
+                raise RuntimeError(f"Kaggle kernels push returned {result.returncode}: {detail or 'authentication rejected'}")
+            raise RuntimeError(f"Kaggle kernels push returned {result.returncode}: {detail or 'empty CLI output'}")
     return slug
 
 
@@ -312,7 +324,9 @@ class handler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": str(exc)})
         except subprocess.TimeoutExpired:
             self._send_json(504, {"error": "O envio ao Kaggle demorou demais. Não consegui confirmar se o processamento foi iniciado."})
-        except Exception:
+        except Exception as exc:
+            error_id = uuid.uuid4().hex[:10]
+            print(f"[videoke-submit:{error_id}] {type(exc).__name__}: {_safe_diagnostic(exc)}")
             self._send_json(502, {"error": "Não consegui iniciar a solicitação no servidor."})
 
     def do_DELETE(self) -> None:
