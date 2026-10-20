@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import uuid
 import zipfile
@@ -86,7 +87,12 @@ def _env_for_kaggle() -> dict[str, str]:
 
 def _run_kaggle(args: list[str], *, timeout: int = 240) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["kaggle", *args],
+        [
+            sys.executable,
+            "-c",
+            "import sys; from kaggle.cli import main; sys.argv=['kaggle', *sys.argv[1:]]; sys.exit(main())",
+            *args,
+        ],
         text=True,
         capture_output=True,
         timeout=timeout,
