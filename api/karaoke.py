@@ -1,5 +1,3 @@
-# API do Videokê Zapia
-
 from __future__ import annotations
 
 import hmac
@@ -75,7 +73,7 @@ def _env_for_kaggle() -> dict[str, str]:
     return env
 
 
-def _run_kaggle(args: list[str], *, timeout: int = 55) -> subprocess.CompletedProcess[str]:
+def _run_kaggle(args: list[str], *, timeout: int = 240) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["kaggle", *args],
         text=True,
@@ -128,22 +126,21 @@ def _start_job(url: str, semitones: int, job_id: str) -> str:
             "code_file": "KaraokeZapia_GPU_Kaggle.ipynb",
             "language": "python",
             "kernel_type": "notebook",
-            "is_private": "true",
-            "enable_gpu": "true",
-            "enable_internet": "true",
-            "machine_shape": "NvidiaTeslaT4",
+            "is_private": True,
+            "enable_gpu": True,
+            "enable_internet": True,
             "dataset_sources": [],
             "competition_sources": [],
             "kernel_sources": [],
             "model_sources": [],
         }
         (stage / "kernel-metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
-        result = _run_kaggle(["kernels", "push", "-p", str(stage), "--timeout", "3600"], timeout=55)
+        result = _run_kaggle(["kernels", "push", "-p", str(stage)], timeout=240)
         if result.returncode != 0:
-            detail = (result.stderr or result.stdout or "").strip()[-1200:]
-            if "KAGGLE_API_TOKEN" in detail or "access_token" in detail.lower():
+            detail = (result.stderr or result.stdout or "").strip().lower()
+            if "auth" in detail or "token" in detail or "credential" in detail:
                 raise RuntimeError("O Kaggle não aceitou a autenticação configurada no servidor.")
-            raise RuntimeError(detail or "O Kaggle não aceitou o envio do notebook.")
+            raise RuntimeError("O Kaggle não aceitou o envio do processamento.")
     return slug
 
 
@@ -163,13 +160,13 @@ def _upload_video(job_id: str) -> bool:
     try:
         blob.head_blob(pathname)
         return True
-    except Exception:
+    except blob.BlobNotFoundError:
         pass
 
     kernel = _kernel_id(job_id)
     with tempfile.TemporaryDirectory(prefix="zapia-kaggle-output-") as temp_name:
         output_dir = Path(temp_name)
-        result = _run_kaggle(["kernels", "output", kernel, "-p", str(output_dir), "-o"], timeout=55)
+        result = _run_kaggle(["kernels", "output", kernel, "-p", str(output_dir), "-o"], timeout=240)
         if result.returncode != 0:
             detail = (result.stderr or result.stdout or "").strip()[-1200:]
             raise RuntimeError(detail or "O Kaggle terminou, mas não consegui obter o arquivo de saída.")
@@ -189,14 +186,16 @@ def _upload_video(job_id: str) -> bool:
         size = video_path.stat().st_size
         if size <= 0 or size > 95 * 1024 * 1024:
             raise RuntimeError("O MP4 ficou vazio ou passou do limite de 95 MB do player privado.")
-        uploaded = blob.put_blob(
-            pathname,
-            video_path.read_bytes(),
-            access="private",
-            content_type="video/mp4",
-            add_random_suffix=False,
-            allow_overwrite=False,
-        )
+        with video_path.open("rb") as video_file:
+            uploaded = blob.put_blob(
+                pathname,
+                video_file,
+                content_length=size,
+                access="private",
+                content_type="video/mp4",
+                add_random_suffix=False,
+                allow_overwrite=False,
+            )
         return bool(uploaded.url)
 
 
@@ -205,10 +204,8 @@ def _delete_video(job_id: str) -> None:
 
     try:
         blob.delete_blob(_blob_path(job_id))
-    except Exception as exc:
-        text = str(exc).lower()
-        if "not found" not in text and "404" not in text:
-            raise
+    except blob.BlobNotFoundError:
+        return
 
 
 class handler(BaseHTTPRequestHandler):
@@ -245,7 +242,7 @@ class handler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": "Identificador de processamento inválido."})
             return
         try:
-            status = _run_kaggle(["kernels", "status", _kernel_id(job_id)], timeout=25)
+            status = _run_kaggle(["kernels", "status", _kernel_id(job_id)], timeout=40)
             output = (status.stdout or status.stderr or "").strip()
             if status.returncode != 0:
                 low = output.lower()
@@ -254,30 +251,36 @@ class handler(BaseHTTPRequestHandler):
                 else:
                     self._send_json(502, {"error": "Não consegui consultar o status no Kaggle."})
                 return
-            lower = output.lower()
-            if any(word in lower for word in ("failed", "error", "cancelled")):
+            match = re.search(r"KernelWorkerStatus\.([A-Z_]+)", output)
+            state = match.group(1) if match else ""
+            if state in {"ERROR", "FAILED", "CANCELLED", "CANCELED"}:
                 self._send_json(200, {"state": "failed", "message": "O Kaggle não conseguiu concluir esse processamento."})
                 return
-            if any(word in lower for word in ("complete", "success", "succeeded")):
+            if state in {"COMPLETE", "COMPLETED", "SUCCESS", "SUCCEEDED"}:
                 ready = _upload_video(job_id)
                 self._send_json(200, {"state": "completed", "media_ready": ready, "message": "Videokê pronto."})
                 return
             self._send_json(200, {"state": "running", "message": "Processando no Kaggle com GPU…"})
         except subprocess.TimeoutExpired:
             self._send_json(504, {"error": "A consulta ao Kaggle demorou demais. Tente de novo em alguns segundos."})
-        except Exception as exc:
-            message = str(exc)
-            if "KAGGLE_API_TOKEN" in message or "access_token" in message.lower():
-                message = "A autenticação do Kaggle no servidor precisa ser revisada."
-            self._send_json(502, {"error": message[:1000]})
+        except Exception:
+            self._send_json(502, {"error": "Não consegui concluir a consulta ou preparar o MP4 privado."})
 
     def do_POST(self) -> None:
         if not _authorized(self):
             self._send_json(401, {"error": "PIN incorreto ou ausente."})
             return
         try:
-            length = min(int(self.headers.get("Content-Length", "0")), 16_384)
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError as exc:
+                raise ValueError("Requisição inválida.") from exc
+            if length <= 0 or length > 16_384:
+                self._send_json(413 if length > 16_384 else 400, {"error": "Requisição inválida ou muito grande."})
+                return
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError("Requisição inválida.")
             action = payload.get("action", "submit")
             if action == "delete":
                 job_id = str(payload.get("job", ""))
@@ -292,7 +295,12 @@ class handler(BaseHTTPRequestHandler):
                 return
             url = _valid_muka_url(payload.get("muka_url"))
             try:
-                semitones = int(payload.get("semitones", 0))
+                raw_semitones = payload.get("semitones", 0)
+                if isinstance(raw_semitones, bool):
+                    raise ValueError
+                semitones = int(raw_semitones)
+                if isinstance(raw_semitones, float) and not raw_semitones.is_integer():
+                    raise ValueError
             except (TypeError, ValueError) as exc:
                 raise ValueError("Escolha um tom entre -6 e +6 semitons.") from exc
             if not -6 <= semitones <= 6:
@@ -304,11 +312,8 @@ class handler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": str(exc)})
         except subprocess.TimeoutExpired:
             self._send_json(504, {"error": "O envio ao Kaggle demorou demais. Não consegui confirmar se o processamento foi iniciado."})
-        except Exception as exc:
-            message = str(exc)
-            if "KAGGLE_API_TOKEN" in message or "access_token" in message.lower():
-                message = "A autenticação do Kaggle no servidor precisa ser revisada."
-            self._send_json(502, {"error": message[:1200]})
+        except Exception:
+            self._send_json(502, {"error": "Não consegui iniciar a solicitação no servidor."})
 
     def do_DELETE(self) -> None:
         if not _authorized(self):
@@ -323,4 +328,4 @@ class handler(BaseHTTPRequestHandler):
             _delete_video(job_id)
             self._send_json(200, {"deleted": True})
         except Exception:
-            self._send_json(502, {"error": "Não consegui apagar o MP4 do armazenamento privado."})Funções privadas do site. Não incluir segredos neste diretório.
+            self._send_json(502, {"error": "Não consegui apagar o MP4 do armazenamento privado."})
