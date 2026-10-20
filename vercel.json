@@ -1,4 +1,14 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": true,
-  "trailingSlash": false
+  "trailingSlash": false,
+  "functions": {
+    "api/karaoke.py": {
+      "maxDuration": 300,
+      "includeFiles": ["KaraokeZapia_GPU_Kaggle.ipynb"]
+    },
+    "api/media.js": {
+      "maxDuration": 30
+    }
+  }
 }

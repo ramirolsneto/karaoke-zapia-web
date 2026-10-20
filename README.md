@@ -1,18 +1,27 @@
-# Karaokê Zapia — interface web
+# Karaokê Zapia — processamento automático no Kaggle GPU
 
-Site estático para informar um link compartilhado do MukaPlay, ajustar o tom e preparar a configuração para o notebook Kaggle. O notebook baixa o MP4 compartilhado, extrai o áudio com FFmpeg, separa a voz com Demucs, sincroniza a letra com Whisper e gera o MP4 do videokê.
+Aplicação pessoal protegida por PIN. O site envia um link de compartilhamento `/dynps/share/` do MukaPlay e o tom escolhido para um kernel privado do Kaggle, consulta o estado do processamento e guarda o MP4 final em um Vercel Blob privado. O navegador recebe apenas uma URL de leitura temporária e assinada para o MP4.
 
-## Publicação no Vercel
+## Configuração do deploy
 
-1. Importe este repositório privado do GitHub no Vercel.
-2. Selecione **Other** como framework; deixe o comando de build vazio e publique a raiz do repositório.
-3. Faça o deploy e teste o endereço gerado.
+- Importe este repositório privado no Vercel e publique a raiz do projeto.
+- Configure `SITE_ACCESS_PIN`, `KAGGLE_USERNAME`, `KAGGLE_API_TOKEN` e conecte o store privado Vercel Blob `videoke-blob` (OIDC + `BLOB_STORE_ID`) ao projeto.
+- Use Node.js 20 ou superior. `vercel.json` configura a função Python para incluir `KaraokeZapia_GPU_Kaggle.ipynb` e permite até 300 segundos por chamada.
+- A função Python executa `kaggle kernels push/status/output` no servidor; nenhum PIN ou token Kaggle é enviado ao navegador.
 
-## Uso
+## Utilização
 
-- Cole um link de compartilhamento MukaPlay no formato `/dynps/share/...` e confirme que tem direito/permissão para processar o conteúdo.
-- Escolha o tom entre -6 e +6 semitons e baixe `karaoke_settings.json`.
-- Baixe `KaraokeZapia_GPU_Kaggle.ipynb`, ative GPU e Internet e cole o link diretamente em `MUKA_URL`, ou adicione o JSON como uma entrada privada do Kaggle.
-- O notebook busca o MP4 da página compartilhada, extrai o áudio e gera instrumental, SRT e MP4 de videokê. A transcrição de canto pode conter erros; revise o SRT.
+1. Entre com o PIN configurado no Vercel.
+2. Cole um link compartilhado MukaPlay HTTPS válido.
+3. Confirme que tem autorização/direito para baixar, salvar e processar o conteúdo.
+4. Escolha o tom (-6 a +6 semitons) e inicie o processamento. A tonalidade é aplicada na renderização do instrumental/MP4 no Kaggle.
+5. Aguarde o status; o player abre o MP4 privado quando estiver pronto. O vídeo inclui controles nativos, botão para tela cheia e tentativa de reprodução remota quando o navegador/dispositivo oferece suporte.
 
-O site só valida o formato do link e cria a configuração; o processamento acontece ao executar manualmente o notebook Kaggle. O site não faz download nem gera MP4 sozinho. A página do MukaPlay pode expor os downloads em MP4; a disponibilidade depende do link. A cota de GPU do Kaggle é semanal e pode variar; [consulte a documentação](https://www.kaggle.com/docs/efficient-gpu-usage).
+O app processa somente após a confirmação explícita de direitos na interface. O fluxo depende da cota e disponibilidade de GPU do Kaggle, da página/arquivo de origem e dos limites de execução e armazenamento. A URL assinada do player expira após aproximadamente duas horas. A opção “Apagar MP4 privado” remove o arquivo do Blob.
+
+## Arquivos principais
+
+- `api/karaoke.py`: PIN, validação do link, envio/consulta do kernel, download do resultado e armazenamento privado.
+- `api/media.js`: emite URL assinada e temporária para um único pathname privado.
+- `KaraokeZapia_GPU_Kaggle.ipynb`: notebook template incluído no pacote da função e preenchido no servidor por execução.
+- `index.html`: interface de PIN, envio, polling e reprodução.
