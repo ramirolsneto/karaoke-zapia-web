@@ -181,7 +181,7 @@ def _upload_video(job_id: str) -> bool:
         return True
     except blob.BlobNotFoundError:
         pass
-return True  # MP4 fica no resultado do Kaggle; nao grava na Vercel
+    return True  # MP4 fica no resultado do Kaggle; nao grava na Vercel
     kernel = _kernel_id(job_id)
     with tempfile.TemporaryDirectory(prefix="zapia-kaggle-output-") as temp_name:
         output_dir = Path(temp_name)
