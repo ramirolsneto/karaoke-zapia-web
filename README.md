@@ -1,6 +1,6 @@
 # Karaokê Zapia — interface web
 
-Site estático para associar uma música a um link do YouTube, reproduzir no player oficial e buscar letras sincronizadas no LRCLIB. Inclui o notebook Kaggle para processamento manual autorizado com Demucs, Whisper e FFmpeg.
+Site estático para informar um link compartilhado do MukaPlay, ajustar o tom e preparar a configuração para o notebook Kaggle. O notebook baixa o MP4 compartilhado, extrai o áudio com FFmpeg, separa a voz com Demucs, sincroniza a letra com Whisper e gera o MP4 do videokê.
 
 ## Publicação no Vercel
 
@@ -10,11 +10,9 @@ Site estático para associar uma música a um link do YouTube, reproduzir no pla
 
 ## Uso
 
-- Cole um link do YouTube para abrir o player oficial.
-- Digite o título e, se quiser, artista para buscar letras no LRCLIB.
-- Escolha o tom entre -6 e +6 semitons e baixe `karaoke_settings.json`; adicione esse arquivo junto ao áudio autorizado num dataset privado do Kaggle.
-- Baixe `KaraokeZapia_GPU_Kaggle.ipynb` e execute o notebook com GPU/Internet ativados. Ele aplica o tom ao instrumental e ao MP4, mantendo a duração aproximadamente.
+- Cole um link de compartilhamento MukaPlay no formato `/dynps/share/...` e confirme que tem direito/permissão para processar o conteúdo.
+- Escolha o tom entre -6 e +6 semitons e baixe `karaoke_settings.json`.
+- Baixe `KaraokeZapia_GPU_Kaggle.ipynb`, ative GPU e Internet e cole o link diretamente em `MUKA_URL`, ou adicione o JSON como uma entrada privada do Kaggle.
+- O notebook busca o MP4 da página compartilhada, extrai o áudio e gera instrumental, SRT e MP4 de videokê. A transcrição de canto pode conter erros; revise o SRT.
 
-O tom selecionado não altera o som do player original do YouTube; ele é aplicado ao resultado gerado no Kaggle.
-
-O site não precisa de backend nem de chave de API. Ele não baixa áudio do YouTube. A cota de GPU do Kaggle é semanal e pode variar; [consulte a documentação](https://www.kaggle.com/docs/efficient-gpu-usage).
+O site só valida o formato do link e cria a configuração; o processamento acontece ao executar manualmente o notebook Kaggle. O site não faz download nem gera MP4 sozinho. A página do MukaPlay pode expor os downloads em MP4; a disponibilidade depende do link. A cota de GPU do Kaggle é semanal e pode variar; [consulte a documentação](https://www.kaggle.com/docs/efficient-gpu-usage).
